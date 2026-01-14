@@ -2,6 +2,20 @@
 
 Desktop toolkit for planning MouseHunt Postscript runs. Conclusion Cliff Simulator bundles several optimizers, simulators, and genre planners tailored for chapter routing.
 
+## Author's Note
+
+This tool simulates Postscript chapters and searches for favorable page ratios so every genre can reach its target notoriety. You can either follow the packaging guide below to create your own `.exe`, or simply grab the ready-made executable from the Releases panel on the right side of the project page.
+
+Postscript Optimizer can take a while—the runtime depends almost entirely on the Optimization Parameters you set. Because the map just launched, some mechanics might still be slightly off; ping me on Discord if you spot issues and I will patch them as soon as I can. Have fun!
+
+## Build Your Own EXE
+
+1. Activate your virtual environment (if any) and install PyInstaller: `pip install pyinstaller`.
+2. From the project root, run `pyinstaller --onefile --windowed main.py`.  
+   - Add `--icon path/to/icon.ico` or `--add-data "file;target_folder"` if you need custom assets.
+3. When the command finishes, the packaged executable will be located at `dist/main.exe`. Copy that file to any machine where you want to run the simulator.
+4. If you need console logs for debugging, drop the `--windowed` flag so the terminal window stays visible.
+
 ## Feature Overview
 
 1. **Postscript Optimizer**  
