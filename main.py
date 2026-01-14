@@ -2050,7 +2050,7 @@ class SimulationTab(ttk.Frame):
 
 def build_app():
     root = tk.Tk()
-    root.title("Chapter Simulation Playground")
+    root.title("Conclusion Cliff Simulator")
     root.geometry("1080x780")
 
     notebook = ttk.Notebook(root)

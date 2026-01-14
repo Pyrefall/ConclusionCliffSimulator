@@ -1,35 +1,35 @@
-# Chapter Simulation Playground
+# Conclusion Cliff Simulator
 
-桌面版 Chapter Simulation Playground，包含多种 MouseHunt 章节模拟与计划工具。
+Desktop toolkit for planning MouseHunt Postscript runs. Conclusion Cliff Simulator bundles several optimizers, simulators, and genre planners tailored for chapter routing.
 
-## 功能概览
+## Feature Overview
 
 1. **Postscript Optimizer**  
-   - 多轮拨动章节页数比例，自动寻找更高的 All Genre ≥ 80% 概率。  
-   - 可自定义拨动范围、迭代次数、候选数量、单个候选的模拟次数。
+   - Iteratively nudges chapter page weights to maximize the probability that every genre reaches ≥ 80% notoriety.  
+   - Dial in the adjustment range, iteration count, candidate pool, and simulations per candidate.
 2. **Postscript Simulator**  
-   - 设定奶酪、章节页数、是否延长，再查看单次运行与 30,000 次模拟的平均值。  
-   - 支持复制/粘贴页数与 Notoriety，便于跨模块交流。
+   - Configure cheese composition, chapter pages, and extension rules, then evaluate a single run plus a 30,000-run Monte Carlo average.  
+   - Supports copy/paste for page weights and notoriety so setups move cleanly between modules.
 3. **Contingency Start Fixer**  
-   - 针对“开局就撞到已满足 Genre”情况，快速注入额外页数并保持剩余 Genre 的比例。  
-   - 滑动条可调节目标 Genre 占比，结果可复制回其它模块使用。
+   - Handles “second run starts with a genre that is already satisfied” by injecting extra pages while keeping the remaining genres proportional.  
+   - Slider lets you pick the target genre share and copy the adjusted distribution for other tabs.
 4. **Dual Postscript Simulator**  
-   - 两个 Setup 串联模拟，含自动延长逻辑，输出单次 + 50,000 次统计与延长触发率。  
-   - 方便规划“先跑 A 再跑 B”的双段路线。
-5. **5/6 Genres 概览标签**  
-   - 20,000 次马槌模拟，对比不同 Genre 池的章节转场概率与马槌消耗。
-6. **Overview**  
-   - 说明文档，概述每个模块和常用参数。
+   - Chains two setups with auto-extension logic, reporting single-run results, 50,000-run averages, and extension trigger rates.  
+   - Ideal for A→B back-to-back plans.
+5. **5/6 Genre Overview Tab**  
+   - Runs 20,000 mallet simulations to compare transition probabilities and mallet use across different genre pools.
+6. **Overview Tab**  
+   - Documentation-style primer describing every module and the most common parameters.
 
-程序会把各模块的输入与参数保存到 `simulator_state.json`，下次启动会自动恢复。
+All module inputs persist to `simulator_state.json` so your latest parameters reload automatically.
 
-## 快速开始
+## Quick Start
 
-1. `pip install -r requirements.txt`（如需）  
+1. `pip install -r requirements.txt` (if your environment is missing dependencies)  
 2. `python main.py`  
-3. 根据 Overview 提示在对应标签页进行模拟/调整。
+3. Follow the prompts in the Overview tab and switch to the module you need.
 
-## Git 上传建议
+## Publishing To Git
 
 ```bash
 git init
@@ -39,8 +39,8 @@ git remote add origin <your-repo-url>
 git push -u origin main
 ```
 
-## 版权声明
+## License
 
-© 2025 gujia. 保留所有权利。  
-**禁止用于盈利或任何商业用途。**  
-如需引用或二次开发，请先与作者联系。  
+© 2025 gujia. All rights reserved.  
+**Personal, non-commercial use only.**  
+Please contact the author before redistributing or creating derivative work.  
