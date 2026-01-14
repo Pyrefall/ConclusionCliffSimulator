@@ -1,0 +1,6 @@
+Copyright © 2025 gujia
+
+This project is released for personal, non-commercial use only.
+Redistribution, modification, or reuse for any commercial purpose is expressly prohibited without prior written permission from the author.
+
+By using this software you acknowledge and agree to the above terms.
