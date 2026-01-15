@@ -18,22 +18,15 @@ Postscript Optimizer can take a while—the runtime depends almost entirely on t
 
 ## Feature Overview
 
-1. **Postscript Optimizer**  
-   - Iteratively nudges chapter page weights to maximize the probability that every genre reaches ≥ 80% notoriety.  
-   - Dial in the adjustment range, iteration count, candidate pool, and simulations per candidate.
-2. **Postscript Simulator**  
-   - Configure cheese composition, chapter pages, and extension rules, then evaluate a single run plus a 30,000-run Monte Carlo average.  
-   - Supports copy/paste for page weights and notoriety so setups move cleanly between modules.
-3. **Contingency Start Fixer**  
-   - Handles “second run starts with a genre that is already satisfied” by injecting extra pages while keeping the remaining genres proportional.  
-   - Slider lets you pick the target genre share and copy the adjusted distribution for other tabs.
-4. **Dual Postscript Simulator**  
-   - Chains two setups with auto-extension logic, reporting single-run results, 50,000-run averages, and extension trigger rates.  
-   - Ideal for A→B back-to-back plans.
-5. **5/6 Genre Overview Tab**  
-   - Runs 20,000 mallet simulations to compare transition probabilities and mallet use across different genre pools.
-6. **Overview Tab**  
-   - Documentation-style primer describing every module and the most common parameters.
+1. **Overview Tab** – Read the built-in guide for each module, the suggested parameters, and how the tabs complement one another.  
+2. **Postscript Optimizer** – Starting from your cheese and page setup, iteratively dial chapter weights via systematic/random candidates, Monte Carlo them, and surface the best distribution plus readiness odds.  
+3. **Postscript Simulator** – Configure cheese stacks, chapter weights, and optional extensions, then inspect a detailed single run plus a 30,000-run summary (average notoriety + All-Genre-≥80 probability). Clipboard helpers simplify copy/paste.  
+4. **Ratio Scaler** – Paste any five-genre distribution and scale the total pages uniformly with a slider while keeping genre ratios intact. Use it for quick what-if checks.  
+5. **Contingency Start Fixer** – Paste an existing distribution, add a genre/length boost, then choose the final share for that genre while the remaining ones retain their ratios—great for emergency reroutes.  
+6. **Dual Postscript Simulator** – Define two setups that run back-to-back with auto-extend logic, copy/paste utilities, and a 50,000-run aggregate report covering average notoriety, readiness rates, and extension usage.  
+7. **Dual Postscript (Pruned)** – Same as above, but when Setup 2 begins it automatically zeroes page weights for genres that already exceeded the notoriety threshold, focusing entirely on unfinished genres.  
+8. **Just Farming Mallets** – Model “short-only” farming loops: run six quick chapters, burn a fixed cheese bundle, and estimate runs, hunts, and mallets per cycle until every genre passes 80 notoriety.  
+9. **5 Genres / 6 Genres** – Refresh to simulate 20,000 five-transition runs for either pool size and compare how often the current genre reappears plus how many mallets rerolls consume.
 
 All module inputs persist to `simulator_state.json` so your latest parameters reload automatically.
 

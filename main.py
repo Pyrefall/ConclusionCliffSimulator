@@ -667,7 +667,7 @@ class CheeseAllocator(PageWeightMixin, PostscriptBase):
             warning = f"Single run: ensure cheese quantities sum to {target} first."
             self.single_result_var.set(warning)
             self._set_ready_indicator(ready=False, label_text="[Not ready]")
-            self.multi_result_var.set("10,000-run average: waiting for a valid setup...")
+            self.multi_result_var.set("100,000-run average: waiting for a valid setup...")
             self.multi_ready_var.set("All Genre >80 Percentage: --")
             return
 
@@ -682,7 +682,7 @@ class CheeseAllocator(PageWeightMixin, PostscriptBase):
         self.single_result_var.set(f"Single run: final genre Notoriety values: {pairs}")
         self._set_ready_indicator(ready=ready)
 
-        runs = 30000
+        runs = 100000
         totals = [0] * len(self.GENRES)
         ready_runs = 0
         for _ in range(runs):
@@ -694,7 +694,7 @@ class CheeseAllocator(PageWeightMixin, PostscriptBase):
         averages = [val / runs for val in totals]
         avg_pairs = "; ".join(f"{genre}:{avg:.2f}" for genre, avg in zip(self.GENRES, averages))
         ready_ratio = ready_runs / runs * 100
-        self.multi_result_var.set(f"10,000-run average: {avg_pairs}")
+        self.multi_result_var.set(f"100,000-run average: {avg_pairs}")
         self.multi_ready_var.set(f"All Genre >80 Percentage: {ready_ratio:.2f}% ({ready_runs}/{runs})")
 
     def _prepare_weight_cumulative(self):
@@ -1998,6 +1998,334 @@ class DualPostscriptSimulator(PostscriptBase):
         color = "green" if ready else "red"
         self.final_ready_label.configure(fg=color)
 
+
+class DualPostscriptPrunedSimulator(DualPostscriptSimulator):
+    """Variant of the dual simulator that zeroes high-notoriety genres before starting setup 2."""
+
+    def _run_dual_simulation(self):
+        if not all(sum(self._get_counts(setup)) == self._setup_target_hunts(setup) for setup in self.setup_data):
+            self.first_result_var.set("First run result: fix cheese totals for both setups first.")
+            self.second_result_var.set(
+                "Second run final result: awaiting valid setup (pruned variant)."
+            )
+            self._set_final_ready(False, label_text="[Not ready]")
+            self.multi_result_var.set("50,000-run combined average: waiting for valid setup...")
+            self.multi_ready_var.set("All Genre >80 Percentage: --")
+            self.extension_stats_var.set("Auto-extend usage: Setup1 -- / Setup2 --")
+            return
+
+        sequences = [self._build_cheese_sequence(self._get_counts(setup)) for setup in self.setup_data]
+        base_notoriety = [
+            self._sanitize_string_var(var, limit=self.NOTORIETY_CAP) for var in self.genre_notoriety_vars
+        ]
+
+        first_cumulative = self._prepare_weight_cumulative(self._get_weight_distribution(self.setup_data[0]))
+        first_values, _, first_extended = self._execute_setup_with_custom_weights(
+            base_notoriety, 0, sequences[0], first_cumulative
+        )
+        first_pairs = "; ".join(f"{genre}:{value}" for genre, value in zip(self.GENRES, first_values))
+        suffix_one = " (auto-extended)" if first_extended else ""
+        self.first_result_var.set(f"First run result: {first_pairs}{suffix_one}")
+
+        second_cumulative, pruned_counts = self._prepare_pruned_cumulative(first_values)
+        final_values, ready, second_extended = self._execute_setup_with_custom_weights(
+            first_values, 1, sequences[1], second_cumulative, pruned_counts
+        )
+        final_pairs = "; ".join(f"{genre}:{value}" for genre, value in zip(self.GENRES, final_values))
+        suffix_two = " (auto-extended)" if second_extended else ""
+        self.second_result_var.set(
+            f"Second run final result (high-genre pages pruned): {final_pairs}{suffix_two}"
+        )
+        self._set_final_ready(ready)
+
+        totals = [0] * len(self.GENRES)
+        ready_runs = 0
+        extend_counts = [0, 0]
+        total_extensions = 0
+        for _ in range(self.MULTI_RUNS):
+            start_values = list(base_notoriety)
+            mid_values, _, ext1 = self._execute_setup_with_custom_weights(
+                start_values, 0, sequences[0], first_cumulative
+            )
+            if ext1:
+                extend_counts[0] += 1
+                total_extensions += 1
+
+            pruned_cumulative, multi_pruned_counts = self._prepare_pruned_cumulative(mid_values)
+            end_values, run_ready, ext2 = self._execute_setup_with_custom_weights(
+                mid_values, 1, sequences[1], pruned_cumulative, multi_pruned_counts
+            )
+            if ext2:
+                extend_counts[1] += 1
+                total_extensions += 1
+
+            if run_ready:
+                ready_runs += 1
+            for idx, val in enumerate(end_values):
+                totals[idx] += val
+
+        averages = [val / self.MULTI_RUNS for val in totals]
+        avg_pairs = "; ".join(f"{genre}:{avg:.2f}" for genre, avg in zip(self.GENRES, averages))
+        ready_ratio = ready_runs / self.MULTI_RUNS * 100
+        avg_extensions = total_extensions / self.MULTI_RUNS
+        self.multi_result_var.set(
+            f"50,000-run combined average (pruned): {avg_pairs} | Avg auto-extends/run: {avg_extensions:.2f}"
+        )
+        self.multi_ready_var.set(
+            f"All Genre >80 Percentage: {ready_ratio:.2f}% ({ready_runs}/{self.MULTI_RUNS})"
+        )
+        extend_rate1 = extend_counts[0] / self.MULTI_RUNS * 100
+        extend_rate2 = extend_counts[1] / self.MULTI_RUNS * 100
+        self.extension_stats_var.set(
+            f"Auto-extend usage: Setup1 {extend_rate1:.2f}% ({extend_counts[0]}/{self.MULTI_RUNS}) / "
+            f"Setup2 {extend_rate2:.2f}% ({extend_counts[1]}/{self.MULTI_RUNS})"
+        )
+
+    def _execute_setup_with_custom_weights(
+        self, start_values, setup_index, sequence, cumulative_weights, custom_counts=None
+    ):
+        values, ready = self._simulate_sequence(start_values, sequence, cumulative_weights)
+        extended = False
+        if custom_counts is None:
+            config = self._extension_config(self.setup_data[setup_index])
+            trigger = self._should_trigger_extension(values, config) if config else False
+        else:
+            config = self._extension_config_with_counts(self.setup_data[setup_index], custom_counts)
+            trigger = (
+                self._should_trigger_extension_with_counts(values, config, custom_counts) if config else False
+            )
+        if config and trigger:
+            extended = True
+            self._apply_extension(values, cumulative_weights, config)
+        ready = all(val >= 80 for val in values)
+        return values, ready, extended
+
+    def _prepare_pruned_cumulative(self, notoriety_values):
+        pruned_counts = self._build_pruned_page_counts(notoriety_values)
+        weights = self._weights_from_counts_list(pruned_counts)
+        cumulative = self._prepare_weight_cumulative(weights)
+        return cumulative, pruned_counts
+
+    def _weights_from_counts_list(self, counts):
+        total = sum(counts)
+        if total <= 0:
+            equal = 1 / len(self.GENRES)
+            return {genre: equal for genre in self.GENRES}
+        return {genre: counts[idx] / total for idx, genre in enumerate(self.GENRES)}
+
+    def _build_pruned_page_counts(self, notoriety_values):
+        setup = self.setup_data[1]
+        threshold = self._second_setup_prune_threshold()
+        counts = [self._sanitize_string_var(var) for var in setup["page_vars"]]
+        pruned = []
+        for idx, count in enumerate(counts):
+            if notoriety_values[idx] > threshold:
+                pruned.append(0)
+            else:
+                pruned.append(count)
+        return pruned
+
+    def _second_setup_prune_threshold(self):
+        setup = self.setup_data[1]
+        return 93 if setup["extend_var"].get() else 90
+
+    def _extension_config_with_counts(self, setup, custom_counts):
+        if not setup["auto_extend_var"].get():
+            return None
+        page_counts = list(custom_counts)
+        if not page_counts:
+            return None
+        max_pages = max(page_counts)
+        if max_pages <= 0:
+            return None
+        top_indices = [idx for idx, value in enumerate(page_counts) if value == max_pages]
+        m_value = setup["m_value"]
+        return {
+            "top_indices": top_indices,
+            "threshold_ready": 80 + m_value,
+            "threshold_high": 33 + m_value,
+            "extra_hunts": 3,
+            "setup_index": self.setup_data.index(setup),
+        }
+
+    def _should_trigger_extension_with_counts(self, values, config, custom_counts):
+        if config["setup_index"] == 1:
+            for idx in config["top_indices"]:
+                page_count = custom_counts[idx]
+                if page_count == 0 and values[idx] < 83:
+                    return False
+        return any(values[idx] < config["threshold_ready"] for idx in config["top_indices"])
+
+
+class MalletFarmSimulator(PostscriptBase):
+    CYCLE_SIMULATIONS = 10000
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.iterations_var = tk.StringVar(value="10000")
+        self.mallets_per_run_var = tk.StringVar(value="5")
+        self.cheese_mid_var = tk.StringVar(value="8")
+        self.cheese_high_var = tk.StringVar(value="2")
+        self.error_var = tk.StringVar()
+        self.run_summary_var = tk.StringVar(value="Average runs per cycle: --")
+        self.hunt_summary_var = tk.StringVar(value="Average hunts per cycle: --")
+        self.mallet_summary_var = tk.StringVar(value="Estimated mallets gained per cycle: --")
+        self._build_ui()
+
+    def _build_ui(self):
+        container = ttk.Frame(self)
+        container.grid(row=0, column=0, sticky="nsew")
+        container.columnconfigure(0, weight=1)
+
+        description = (
+            "Just Farming Mallets simulator: spam six short chapters per run, translate accumulated page weights "
+            "into notoriety via fixed cheese (8×+50, 2×+125 by default), and repeat until every genre exceeds 80 notoriety. "
+            "This tab estimates how many full runs and hunts are needed per cycle and how many mallets you gain if you know "
+            "your expected Mallets/run value."
+        )
+        ttk.Label(container, text=description, wraplength=780, justify="left").grid(
+            row=0, column=0, sticky="w", pady=(10, 5)
+        )
+
+        form = ttk.Frame(container)
+        form.grid(row=1, column=0, sticky="w", pady=(5, 10))
+
+        ttk.Label(form, text="Cycles to simulate:").grid(row=0, column=0, sticky="w", pady=2)
+        ttk.Entry(form, textvariable=self.iterations_var, width=10).grid(row=0, column=1, padx=(4, 15))
+
+        ttk.Label(form, text="Mallets earned per run (optional):").grid(row=0, column=2, sticky="w", pady=2)
+        ttk.Entry(form, textvariable=self.mallets_per_run_var, width=10).grid(row=0, column=3, padx=(4, 15))
+
+        ttk.Label(form, text="+50 notoriety cheese per run:").grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Entry(form, textvariable=self.cheese_mid_var, width=10).grid(row=1, column=1, padx=(4, 15))
+
+        ttk.Label(form, text="+125 notoriety cheese per run:").grid(row=1, column=2, sticky="w", pady=2)
+        ttk.Entry(form, textvariable=self.cheese_high_var, width=10).grid(row=1, column=3, padx=(4, 15))
+
+        ttk.Label(container, textvariable=self.error_var, foreground="red").grid(row=2, column=0, sticky="w")
+
+        ttk.Button(container, text="Run Mallet Farming Simulation", command=self._run_mallet_simulation).grid(
+            row=3, column=0, sticky="w", pady=(5, 10)
+        )
+
+        results = ttk.Frame(container)
+        results.grid(row=4, column=0, sticky="w", pady=(5, 10))
+
+        ttk.Label(results, textvariable=self.run_summary_var, font=("Arial", 11)).grid(
+            row=0, column=0, sticky="w", pady=2
+        )
+        ttk.Label(results, textvariable=self.hunt_summary_var, font=("Arial", 11)).grid(
+            row=1, column=0, sticky="w", pady=2
+        )
+        ttk.Label(results, textvariable=self.mallet_summary_var, font=("Arial", 11)).grid(
+            row=2, column=0, sticky="w", pady=2
+        )
+
+    def _sanitize_int_var(self, tk_var, default):
+        value = tk_var.get().strip()
+        if not value:
+            tk_var.set(str(default))
+            return default
+        try:
+            parsed = int(value)
+        except ValueError:
+            tk_var.set(str(default))
+            return default
+        return parsed
+
+    def _sanitize_float_var(self, tk_var, default):
+        value = tk_var.get().strip()
+        if not value:
+            tk_var.set(str(default))
+            return default
+        try:
+            parsed = float(value)
+        except ValueError:
+            tk_var.set(str(default))
+            return default
+        return parsed
+
+    def _run_mallet_simulation(self):
+        cycles = max(1, self._sanitize_int_var(self.iterations_var, 10000))
+        mallets_per_run = max(0.0, self._sanitize_float_var(self.mallets_per_run_var, 0.0))
+        cheese_mid = max(0, self._sanitize_int_var(self.cheese_mid_var, 8))
+        cheese_high = max(0, self._sanitize_int_var(self.cheese_high_var, 2))
+        if cheese_mid + cheese_high <= 0:
+            self.error_var.set("Provide at least one cheese so notoriety can advance.")
+            return
+        self.error_var.set("")
+        stats = self._simulate_cycles(cycles, mallets_per_run, cheese_mid, cheese_high)
+        self.run_summary_var.set(
+            f"Average runs per cycle: {stats['avg_runs_per_cycle']:.2f} (last cycle took {stats['last_cycle_runs']} runs)"
+        )
+        self.hunt_summary_var.set(
+            f"Average hunts per cycle: {stats['avg_hunts_per_cycle']:.2f} (last cycle spent {stats['last_cycle_hunts']} hunts)"
+        )
+        self.mallet_summary_var.set(
+            f"Estimated mallets gained per cycle: {stats['estimated_mallets_per_cycle']:.2f}"
+        )
+
+    def _simulate_cycles(self, cycles, mallets_per_run, cheese_mid, cheese_high):
+        total_runs = 0
+        total_hunts = 0
+        last_cycle_runs = 0
+        last_cycle_hunts = 0
+        for _ in range(cycles):
+            notoriety = [0] * len(self.GENRES)
+            runs = 0
+            hunts = 0
+            while True:
+                run_hunts = self._simulate_single_run(notoriety, cheese_mid, cheese_high)
+                runs += 1
+                hunts += run_hunts
+                if all(value > 80 for value in notoriety):
+                    total_runs += runs
+                    total_hunts += hunts
+                    last_cycle_runs = runs
+                    last_cycle_hunts = hunts
+                    notoriety = [0] * len(self.GENRES)
+                    break
+            # Cycle resets notoriety automatically after break.
+        avg_runs = total_runs / cycles
+        avg_hunts = total_hunts / cycles
+        mallet_gain = avg_runs * mallets_per_run
+        return {
+            "avg_runs_per_cycle": avg_runs,
+            "avg_hunts_per_cycle": avg_hunts,
+            "estimated_mallets_per_cycle": mallet_gain,
+            "last_cycle_runs": last_cycle_runs,
+            "last_cycle_hunts": last_cycle_hunts,
+        }
+
+    def _simulate_single_run(self, notoriety, cheese_mid, cheese_high):
+        pages = [0 for _ in self.GENRES]
+        hunts = 0
+        for idx in range(6):
+            hunts_needed = random.choice((10, 20, 30)) if idx == 0 else 10
+            hunts += hunts_needed
+            genre_idx = random.randrange(len(self.GENRES))
+            pages[genre_idx] += (hunts_needed // 10) * 250
+        sequence = self._build_mallet_cheese_sequence(cheese_mid, cheese_high)
+        hunts += len(sequence)
+        weights = self._weights_from_page_counts(pages)
+        cumulative = self._prepare_weight_cumulative(weights)
+        for cheese_value in sequence:
+            self._apply_hunt_step(notoriety, cheese_value, cumulative)
+        return hunts
+
+    def _build_mallet_cheese_sequence(self, cheese_mid, cheese_high):
+        sequence = [50] * cheese_mid
+        sequence.extend([125] * cheese_high)
+        return sequence
+
+    def _weights_from_page_counts(self, counts):
+        total = sum(counts)
+        if total <= 0:
+            equal = 1 / len(self.GENRES)
+            return {genre: equal for genre in self.GENRES}
+        return {genre: counts[idx] / total for idx, genre in enumerate(self.GENRES)}
+
+
 class SimulationTab(ttk.Frame):
     def __init__(self, parent, num_genres, iterations=20000):
         super().__init__(parent)
@@ -2066,6 +2394,8 @@ def build_app():
         "Ratio Scaler: Paste any five-genre distribution and use a slider to uniformly scale the total pages while preserving the genre ratios. The scaled numbers/percentages update instantly for quick what-if checks.\n\n"
         "Contingency Start Fixer: Paste an existing chapter-page distribution, pick a genre + hunt length (adds a fixed page boost), then use the slider to target a final share for that genre while the other genres keep their relative ratios. Ideal for patching awkward starts or planning emergency boosts; results update live with counts and percentages.\n\n"
         "Dual Postscript Simulator: Define two setups that run back-to-back (Setup 2 builds on Setup 1's results). Both setups support auto-extend conditions, page-weight copy/paste, and notoriety editing. After showing the first-run and final-run outcomes (with auto-extend indicators), the tool performs 50,000 combined runs to summarize average notoriety, All-Genre-≥80 percentage, and auto-extend usage frequency for each setup.\n\n"
+        "Dual Postscript (Pruned): Same dual-run workflow, but when Setup 2 begins it automatically treats any genre that ended Setup 1 above 90 notoriety (93 if extended) as having zero page weight, so Setup 2 focuses entirely on the remaining genres. Statistics and auto-extend logic respect this pruning.\n\n"
+        "Just Farming Mallets: Approximate how many quick short-only runs and hunts it takes to push every genre beyond 80 notoriety when you ignore map mechanics. Enter how many mallets you typically earn per run to project mallets per cycle.\n\n"
         "5 Genres / 6 Genres: Compare chapter transition probabilities and Mallet usage between 5-category and 6-category pools. Each refresh triggers 20,000 simulations over five transitions, so you can see how often the current genre reappears and how many rerolls Mallets absorb."
     )
     ttk.Label(overview, text=description, justify="left", padding=10, wraplength=660).pack(anchor="w")
@@ -2080,6 +2410,10 @@ def build_app():
     notebook.add(fixer_tab, text="Contingency Start Fixer")
     dual_tab = DualPostscriptSimulator(notebook)
     notebook.add(dual_tab, text="Dual Postscript Simulator")
+    dual_pruned_tab = DualPostscriptPrunedSimulator(notebook)
+    notebook.add(dual_pruned_tab, text="Dual Postscript (Pruned)")
+    mallet_tab = MalletFarmSimulator(notebook)
+    notebook.add(mallet_tab, text="Just Farming Mallets")
     tab_5_genres = SimulationTab(notebook, num_genres=5)
     tab_6_genres = SimulationTab(notebook, num_genres=6)
     notebook.add(tab_5_genres, text="5 Genres")
