@@ -244,6 +244,8 @@ class ToolTip:
 
 
 class CheeseAllocator(PageWeightMixin, PostscriptBase):
+    THRESHOLD_BREAKPOINTS = (80, 90, 93)
+
     def __init__(self, parent):
         super().__init__(parent)
         self.extend_var = tk.BooleanVar(value=False)
@@ -261,6 +263,11 @@ class CheeseAllocator(PageWeightMixin, PostscriptBase):
         self.multi_result_var = tk.StringVar(value="20,000-run average: not started yet.")
         self.multi_ready_var = tk.StringVar(value="All Genre >80 Percentage: --")
         self.extension_stats_var = tk.StringVar(value="")
+        self.threshold_stats_vars = {
+            threshold: tk.StringVar(value=f"[%of#ofGenre>{threshold}] --")
+            for threshold in self.THRESHOLD_BREAKPOINTS
+        }
+        self.threshold_copy_status_var = tk.StringVar(value="")
         self._build_ui()
         self._set_default_counts()
         self._update_page_percentages()
@@ -385,11 +392,24 @@ class CheeseAllocator(PageWeightMixin, PostscriptBase):
 
         multi_frame = ttk.Frame(left)
         multi_frame.grid(row=row, column=0, columnspan=5, sticky="w", pady=(10, 0))
+        multi_frame.grid_columnconfigure(0, weight=1)
         ttk.Label(multi_frame, textvariable=self.multi_result_var, wraplength=420, justify="left").grid(
             row=0, column=0, sticky="w"
         )
+        ttk.Button(multi_frame, text="Copy Summary", command=self._copy_threshold_summary).grid(
+            row=0, column=1, sticky="e", padx=(10, 0)
+        )
         ttk.Label(multi_frame, textvariable=self.multi_ready_var).grid(row=1, column=0, sticky="w", pady=(4, 0))
         ttk.Label(multi_frame, textvariable=self.extension_stats_var).grid(row=2, column=0, sticky="w", pady=(4, 0))
+        for offset, threshold in enumerate(self.THRESHOLD_BREAKPOINTS, start=3):
+            ttk.Label(multi_frame, textvariable=self.threshold_stats_vars[threshold]).grid(
+                row=offset, column=0, sticky="w", pady=(4, 0)
+            )
+        status_row = len(self.THRESHOLD_BREAKPOINTS) + 3
+        self.threshold_copy_status_label = tk.Label(
+            multi_frame, textvariable=self.threshold_copy_status_var, fg="green"
+        )
+        self.threshold_copy_status_label.grid(row=status_row, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         # Right side: Notoriety tracker
         ttk.Label(right, text="Genre Notoriety (max 200)", font=("Arial", 11, "bold")).grid(
@@ -685,17 +705,32 @@ class CheeseAllocator(PageWeightMixin, PostscriptBase):
         runs = 100000
         totals = [0] * len(self.GENRES)
         ready_runs = 0
+        threshold_counts = {
+            threshold: [0] * (len(self.GENRES) + 1) for threshold in self.THRESHOLD_BREAKPOINTS
+        }
         for _ in range(runs):
             values, sim_ready = self._simulate_sequence(base_notoriety, cheese_sequence, cumulative_weights)
             ready_runs += 1 if sim_ready else 0
             for idx, val in enumerate(values):
                 totals[idx] += val
+            for threshold in self.THRESHOLD_BREAKPOINTS:
+                above_count = sum(1 for val in values if val > threshold)
+                threshold_counts[threshold][above_count] += 1
 
         averages = [val / runs for val in totals]
         avg_pairs = "; ".join(f"{genre}:{avg:.2f}" for genre, avg in zip(self.GENRES, averages))
         ready_ratio = ready_runs / runs * 100
         self.multi_result_var.set(f"100,000-run average: {avg_pairs}")
         self.multi_ready_var.set(f"All Genre >80 Percentage: {ready_ratio:.2f}% ({ready_runs}/{runs})")
+        for threshold in self.THRESHOLD_BREAKPOINTS:
+            parts = []
+            counts = threshold_counts[threshold]
+            for genre_count in range(1, len(self.GENRES) + 1):
+                percent = counts[genre_count] / runs * 100
+                parts.append(f"{genre_count}: {percent:.2f}%")
+            summary = "; ".join(parts)
+            self.threshold_stats_vars[threshold].set(f"[%of#ofGenre>{threshold}] {summary}")
+        self.threshold_copy_status_var.set("")
 
     def _prepare_weight_cumulative(self):
         weights = self.get_genre_weight_distribution()
@@ -707,6 +742,27 @@ class CheeseAllocator(PageWeightMixin, PostscriptBase):
         self.single_ready_var.set(label_text)
         color = "green" if ready else "red"
         self.single_ready_label.configure(fg=color)
+
+    def _copy_threshold_summary(self):
+        segments = [
+            self.multi_result_var.get(),
+            self.multi_ready_var.get(),
+            self.extension_stats_var.get(),
+        ]
+        segments.extend(self.threshold_stats_vars[threshold].get() for threshold in self.THRESHOLD_BREAKPOINTS)
+        payload = "\n".join(segment for segment in segments if segment.strip())
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(payload)
+        except tk.TclError:
+            self._set_threshold_copy_status("Clipboard unavailable.", success=False)
+            return
+        self._set_threshold_copy_status("Summary copied.", success=True)
+
+    def _set_threshold_copy_status(self, message, success=True):
+        self.threshold_copy_status_var.set(message)
+        color = "green" if success else "red"
+        self.threshold_copy_status_label.configure(foreground=color)
 
 
 class PostscriptOptimizer(PageWeightMixin, PostscriptBase):
