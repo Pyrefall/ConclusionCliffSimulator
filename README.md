@@ -26,7 +26,7 @@ Postscript Optimizer can take a while—the runtime depends almost entirely on t
 6. **Dual Postscript Simulator** – Define two setups that run back-to-back with auto-extend logic, copy/paste utilities, and a 50,000-run aggregate report covering average notoriety, readiness rates, and extension usage.  
 7. **Dual Postscript (Pruned)** – Same as above, but when Setup 2 begins it automatically zeroes page weights for genres that already exceeded the notoriety threshold, focusing entirely on unfinished genres.  
 8. **Just Farming Mallets** – Model “short-only” farming loops: run six quick chapters, burn a fixed cheese bundle, and estimate runs, hunts, and mallets per cycle until every genre passes 80 notoriety.  
-9. **5 Genres / 6 Genres** – Refresh to simulate 20,000 five-transition runs for either pool size and compare how often the current genre reappears plus how many mallets rerolls consume.
+9. **5 Genres / 6 Genres** – Refresh to simulate 40,000 chains where you keep rerolling until the same genre (and separately the exact length/genre combo) appears through five additional areas; compares the Mallet burn when pulling from 5- vs 6-genre pools.
 
 All module inputs persist to `simulator_state.json` so your latest parameters reload automatically.
 

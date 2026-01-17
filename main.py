@@ -10,7 +10,11 @@ LENGTHS = ("Short", "Medium", "Long")
 
 def generate_options(num_genres):
     """Return a mapping of length -> genre for the next area."""
-    return {length: random.randrange(num_genres) for length in LENGTHS}
+    if num_genres < len(LENGTHS):
+        # Fallback to allowing repeats if pool is smaller than required slots.
+        return {length: random.randrange(num_genres) for length in LENGTHS}
+    picks = random.sample(range(num_genres), len(LENGTHS))
+    return {length: picks[idx] for idx, length in enumerate(LENGTHS)}
 
 
 def simulate_mallet_usage(check_func, num_genres):
@@ -23,49 +27,26 @@ def simulate_mallet_usage(check_func, num_genres):
         mallets_spent += 3
 
 
-def run_simulation(num_genres, iterations=20000):
-    """Simulate iterations runs and aggregate probabilities and mallet usage."""
-    same_genre_hits = 0
-    total_transitions = 0
-    mallets_same_genre = 0
-    mallets_same_genre_length = 0
-
+def run_simulation(num_genres, iterations=40000):
+    """Simulate mallet usage to reach five areas when matching genre-only or exact length/genre combos."""
+    total_genre_mallets = 0
+    total_combo_mallets = 0
     for _ in range(iterations):
-        first_genre = random.randrange(num_genres)
-        first_length = random.choice(LENGTHS)
-        current_genre = first_genre
-
+        target_genre = random.randrange(num_genres)
+        target_length = random.choice(LENGTHS)
         for _ in range(5):
-            total_transitions += 1
-            options = generate_options(num_genres)
-
-            if any(genre == current_genre for genre in options.values()):
-                same_genre_hits += 1
-
-            chosen_length = random.choice(LENGTHS)
-            current_genre = options[chosen_length]
-
-        for _ in range(5):
-            mallets_same_genre += simulate_mallet_usage(
-                lambda opts, genre=first_genre: any(g == genre for g in opts.values()),
+            total_genre_mallets += simulate_mallet_usage(
+                lambda opts, genre=target_genre: any(g == genre for g in opts.values()),
                 num_genres,
             )
-            mallets_same_genre_length += simulate_mallet_usage(
-                lambda opts, genre=first_genre, length=first_length: opts[length] == genre,
+            total_combo_mallets += simulate_mallet_usage(
+                lambda opts, genre=target_genre, length=target_length: opts[length] == genre,
                 num_genres,
             )
-
-    probability_same_genre = same_genre_hits / max(1, total_transitions)
-    probability_per_length = probability_same_genre / len(LENGTHS)
-    avg_mallets_same_genre = mallets_same_genre / iterations
-    avg_mallets_same_genre_length = mallets_same_genre_length / iterations
-
-    return {
-        "prob_same_genre": probability_same_genre,
-        "prob_per_length": probability_per_length,
-        "avg_mallets_same_genre": avg_mallets_same_genre,
-        "avg_mallets_same_genre_length": avg_mallets_same_genre_length,
-    }
+    divisor = max(1, iterations)
+    avg_genre = total_genre_mallets / divisor
+    avg_combo = total_combo_mallets / divisor
+    return {"avg_mallets_to_five_genre": avg_genre, "avg_mallets_to_five_combo": avg_combo}
 
 
 class PageWeightMixin:
@@ -2383,53 +2364,37 @@ class MalletFarmSimulator(PostscriptBase):
 
 
 class SimulationTab(ttk.Frame):
-    def __init__(self, parent, num_genres, iterations=20000):
+    def __init__(self, parent, num_genres, iterations=40000):
         super().__init__(parent)
         self.num_genres = num_genres
         self.iterations = iterations
-        self.same_genre_var = tk.StringVar()
-        self.per_length_var = tk.StringVar()
-        self.mallet_genre_var = tk.StringVar()
-        self.mallet_genre_length_var = tk.StringVar()
+        self.avg_mallets_genre_var = tk.StringVar()
+        self.avg_mallets_combo_var = tk.StringVar()
         self._build_ui()
         self.refresh()
 
     def _build_ui(self):
         info = (
-            f"{self.iterations} simulations, each covering 6 areas (including the first one).\n"
-            "Records probabilities during the next 5 transitions plus the average Mallet usage."
+            f"{self.iterations} simulations. Each run keeps rerolling until the same genre appears in five new areas,"
+            " and separately until the exact length/genre combo reappears."
         )
         ttk.Label(self, text=f"Genre pool size: {self.num_genres}").grid(row=0, column=0, sticky="w", pady=(10, 2))
         ttk.Label(self, text=info, justify="left").grid(row=1, column=0, sticky="w")
 
         ttk.Separator(self, orient="horizontal").grid(row=2, column=0, columnspan=2, sticky="ew", pady=10)
 
-        ttk.Label(self, text="Probability: next area contains current Genre").grid(row=3, column=0, sticky="w")
-        ttk.Label(self, textvariable=self.same_genre_var, font=("Arial", 12, "bold")).grid(row=4, column=0, sticky="w")
+        ttk.Label(self, text="Avg. Mallets to match same Genre across five areas:").grid(row=3, column=0, sticky="w")
+        ttk.Label(self, textvariable=self.avg_mallets_genre_var, font=("Arial", 12, "bold")).grid(row=4, column=0, sticky="w")
 
-        ttk.Label(self, text="Probability for a specific length (divide by 3):").grid(
-            row=5, column=0, sticky="w", pady=(10, 0)
-        )
-        ttk.Label(self, textvariable=self.per_length_var).grid(row=6, column=0, sticky="w")
+        ttk.Label(self, text="Avg. Mallets to match same Length + Genre across five areas:").grid(row=5, column=0, sticky="w", pady=(10, 0))
+        ttk.Label(self, textvariable=self.avg_mallets_combo_var, font=("Arial", 12, "bold")).grid(row=6, column=0, sticky="w")
 
-        ttk.Separator(self, orient="horizontal").grid(row=7, column=0, columnspan=2, sticky="ew", pady=10)
-
-        ttk.Label(self, text="Avg. Mallets to match first Genre each time:").grid(row=8, column=0, sticky="w")
-        ttk.Label(self, textvariable=self.mallet_genre_var, font=("Arial", 11)).grid(row=9, column=0, sticky="w")
-
-        ttk.Label(self, text="Avg. Mallets to match first Genre + length:").grid(
-            row=10, column=0, sticky="w", pady=(10, 0)
-        )
-        ttk.Label(self, textvariable=self.mallet_genre_length_var, font=("Arial", 11)).grid(row=11, column=0, sticky="w")
-
-        ttk.Button(self, text="Run again", command=self.refresh).grid(row=12, column=0, pady=20, sticky="w")
+        ttk.Button(self, text="Run again", command=self.refresh).grid(row=7, column=0, pady=20, sticky="w")
 
     def refresh(self):
         stats = run_simulation(self.num_genres, self.iterations)
-        self.same_genre_var.set(f"{stats['prob_same_genre'] * 100:.2f}%")
-        self.per_length_var.set(f"{stats['prob_per_length'] * 100:.2f}%")
-        self.mallet_genre_var.set(f"{stats['avg_mallets_same_genre']:.2f} Mallets")
-        self.mallet_genre_length_var.set(f"{stats['avg_mallets_same_genre_length']:.2f} Mallets")
+        self.avg_mallets_genre_var.set(f"{stats['avg_mallets_to_five_genre']:.2f} Mallets")
+        self.avg_mallets_combo_var.set(f"{stats['avg_mallets_to_five_combo']:.2f} Mallets")
 
 
 def build_app():
@@ -2452,7 +2417,7 @@ def build_app():
         "Dual Postscript Simulator: Define two setups that run back-to-back (Setup 2 builds on Setup 1's results). Both setups support auto-extend conditions, page-weight copy/paste, and notoriety editing. After showing the first-run and final-run outcomes (with auto-extend indicators), the tool performs 50,000 combined runs to summarize average notoriety, All-Genre-≥80 percentage, and auto-extend usage frequency for each setup.\n\n"
         "Dual Postscript (Pruned): Same dual-run workflow, but when Setup 2 begins it automatically treats any genre that ended Setup 1 above 90 notoriety (93 if extended) as having zero page weight, so Setup 2 focuses entirely on the remaining genres. Statistics and auto-extend logic respect this pruning.\n\n"
         "Just Farming Mallets: Approximate how many quick short-only runs and hunts it takes to push every genre beyond 80 notoriety when you ignore map mechanics. Enter how many mallets you typically earn per run to project mallets per cycle.\n\n"
-        "5 Genres / 6 Genres: Compare chapter transition probabilities and Mallet usage between 5-category and 6-category pools. Each refresh triggers 20,000 simulations over five transitions, so you can see how often the current genre reappears and how many rerolls Mallets absorb."
+        "5 Genres / 6 Genres: Each refresh runs 40,000 simulations to estimate how many Mallets it takes to roll the same genre (and separately the exact length/genre combo) across five new areas when drawing from 5- or 6-genre pools."
     )
     ttk.Label(overview, text=description, justify="left", padding=10, wraplength=660).pack(anchor="w")
 
