@@ -8,6 +8,8 @@ This tool simulates Postscript chapters and searches for favorable page ratios s
 
 Postscript Optimizer can take a while—the runtime depends almost entirely on the Optimization Parameters you set. Because the map just launched, some mechanics might still be slightly off; ping me on Discord if you spot issues and I will patch them as soon as I can. Have fun!
 
+** Here is another simulator I wrote. It fully simulates the actual gameplay of Conclusion Cliff and also tracks the drops and consumption of various resources. If you are not yet fully familiar with the mechanics of this area, I strongly recommend trying this first: https://github.com/Pyrefall/TheActualConclusionCliffSimulator **
+
 ## Build Your Own EXE
 
 1. Activate your virtual environment (if any) and install PyInstaller: `pip install pyinstaller`.
